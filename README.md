@@ -27,25 +27,30 @@ horodori.com이 유일하게 "편성 시뮬레이터"(계산 도구)를 만들�
 
 | 포함 (숫자로 계산) | 제외 (조건만 표시, 수치 미반영) |
 |---|---|
-| 카드 5장의 Performance/Technique/Sense 합 | 스코어서포트 (환산식 자체가 미확정) |
+| 멤버 5명의 Performance/Technique/Sense 합 (리더 본인 스탯 제외) | 스코어서포트 (환산식 자체가 미확정) |
 | 리더 의상스킬의 파라미터 UP% (조건 성립 시) | 스페셜 스킬 (발동 순서/타이밍 미확정) |
 | | 액티브/패시브 스킬 효과량 (조건 성립 여부만 표시) |
 | | 홀로멘보드, 커넥트, 메모리, 멤버강화보너스 |
 
 이 범위 구분은 horodori.com의 계산 모델을 그대로 따른 것입니다(출처 위와 동일).
 
-## ⚠️ 구조 충돌: "5인 편성" vs "6인 편성" — 이 레포는 5인 모델을 채택
+## 구조: 리더 1명 + 멤버 5명 = 총 6인 (2026-07-29 사용자 확인으로 최종 정정)
 
-- **horodori.com 모델**: "ユニットはリーダー1人＋メンバー5人の6人編成" — 리더가 5장
-  카드와 별도 슬롯인 6인 구조. (출처: horodori.com/members/deck-builder, "メンバーの基本" 섹션)
-- **유저 실기기 스크린샷 검증 결과** (이 프로젝트 이전 세션에서 직접 확인): 편성 화면은
-  **총 5칸**이고, 리더는 그 5칸 중 하나에 스포트라이트가 있는 구조. 카드 5장 = 리더 1
-  + 멤버 4.
-- 공식 사전등록/출시 전 자료 일부도 "1+5=6인"으로 표기했던 이력이 있어 혼동의 근원으로
-  추정됨. **이 계산기는 실기기 스크린샷(직접 관찰, 가장 신뢰도 높은 근거)을 따라 5인
-  구조를 채택**합니다. 즉 리더의 스탯도 5장 합계에 포함되고, 리더의 의상스킬 발동조건
-  판정 시에도 리더 자신이 조건 카운트에 들어갑니다(예: 노엘(리더, 해피) + 미코(해피) =
-  "해피 2인 이상" 조건 충족, 리더 포함 카운트).
+- **확정된 구조**: 리더는 멤버 5명과 **별도 슬롯**이며, 리더 자신의 스탯은 3축 합계에
+  포함되지 않습니다(오직 코스튬 배율 판정에만 쓰임). 리더의 의상스킬 발동조건(예:
+  "holoX 2인 이상")은 **멤버 5명끼리만** 카운트하며, 리더 자신은 그 카운트에 들어가지
+  않습니다(예: 라플라스(리더, holoX)를 리더로 쓸 때 "holoX 2인 이상" 조건을
+  충족하려면 리더를 제외한 멤버 5명 중 2명이 holoX여야 함, 라플라스 자신은 카운트
+  안 됨).
+- **출처**: horodori.com/members/deck-builder의 편성 예시를 재검증해보면, 예시 조건이
+  "3期生が2人以上"일 때 3期生 리더 자신은 카운트되지 않고 멤버 5명 중 3期生 2명만
+  카운트되는 것으로 확인됨 — horodori.com의 "ユニットはリーダー1人＋メンバー5人の6人編成"
+  문구와 일치.
+- **이전 오류 정정**: 본 레포는 2026-07-29 초반에 "실기기 스크린샷으로 5인 구조를
+  검증했다"고 잘못 기록하고 있었으며, 이로 인해 리더의 스탯이 3축합계에 잘못 포함되고 조건 판정 시
+  리더가 자신의 조건에 카운트되는 버그가 있었습니다. 사용자의 직접 지적으로 정정되었으며,
+  이로 인해 예를 들어 "큐트타입 카드 2장만 보유한 상태에서 해당 큐트 카드를 리더로 쓰면
+  자신의 "큐트 2인 이상" 코스튬이 발동 실패하는" 등의 결론이 바뀌었습니다.
 - **불일치 발견 시**: 실제 게임 내 표시값과 이 계산기 결과가 다르면, 게임 내 표시가
   항상 우선입니다. 이 계산기는 참고용 도구일 뿐입니다.
 
@@ -67,22 +72,21 @@ holodori-calculator/
 const { loadMembers, calcUnitStats, listSkills, compareFormations } = require("./src/calculator.js");
 const members = loadMembers();
 
-// 예: 라플라스 리더 덱 시산
+// 예: 라플라스를 리더로, 나머지 5명을 멤버로 시산 (리더는 멤버 배열에 포함하면 안 됨)
 const result = calcUnitStats(
   members,
-  ["laplus_sakusen", "koyori_labo", "iroha_chikurin", "azki_sakihokoru", "kobo_amefuri"],
-  "laplus_sakusen"
+  "laplus_sakusen",
+  ["koyori_labo", "iroha_chikurin", "azki_sakihokoru", "kobo_amefuri", "kiara_phoenix"]
 );
 console.log(result);
 
 // 스킬 목록(정성적, 수치 미반영)
-console.log(listSkills(members, [...], "laplus_sakusen"));
+console.log(listSkills(members, "laplus_sakusen", [...]));
 
 // 여러 편성 비교
 console.log(compareFormations(members, [
-  { label: "노엘 리더", fiveCardIds: ["noel_kazekaoru","miko_sakura_bloom","azki_sakihokoru","koyori_labo","haato_oyatsu"], leaderId: "noel_kazekaoru" },
-  { label: "이로하 리더", fiveCardIds: ["iroha_chikurin","kiara_phoenix","azki_sakihokoru","koyori_labo","kobo_amefuri"], leaderId: "iroha_chikurin" },
-  { label: "라플라스 리더", fiveCardIds: ["laplus_sakusen","koyori_labo","iroha_chikurin","azki_sakihokoru","kobo_amefuri"], leaderId: "laplus_sakusen" },
+  { label: "라플라스 리더", leaderId: "laplus_sakusen", fiveMemberIds: ["koyori_labo","iroha_chikurin","azki_sakihokoru","kobo_amefuri","kiara_phoenix"] },
+  { label: "코보 리더", leaderId: "kobo_amefuri", fiveMemberIds: ["noel_kazekaoru","koyori_labo","ririka_ceo","laplus_sakusen","iroha_chikurin"] },
 ]));
 ```
 
@@ -110,3 +114,9 @@ console.log(compareFormations(members, [
 3. **전체 59장 수록 완료, 검증 과정에서 오타 5건 발견/수정함** (P+T+S 산술 불일치 4건 +
    스바루수영복 타입오류 1건) — 상세는 `STATUS.md` 참고. 전체 59장의 P+T+S 총합이 정확히
    5개 값 중 하나라는 패턴을 발견해서 검증에 활용함.
+4. **구조 오류 정정 이력(2026-07-29)**: 초기 버전은 "리더가 멤버 5명 중 1명"이라는
+   잘못된 5인 구조를 채택하고 있었고, 이로 인해 리더 스탯이 3축합계에 잘못 포함되거나
+   리더가 자신의 코스튬 조건에 스스로 카운트되는 오류가 있었습니다. 사용자 직접 지적으로
+   "리더1+멤버5=6인, 리더는 조건 카운트에서도 제외"로 정정되었습니다. 이 정정으로 일부
+   리더 후보(예: 보유 큐트타입 카드가 2장뿐인 상태에서 그중 하나를 리더로 쓰는 경우)의
+   코스튬 발동 가능 여부가 바뀌었습니다.
