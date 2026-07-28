@@ -18,6 +18,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { toJa, UI } = require("./i18n.js");
 
 function loadMembers() {
   const p = path.join(__dirname, "..", "data", "members.json");
@@ -31,14 +32,20 @@ function findCard(members, id) {
   return c;
 }
 
+/** 카드 객체에서 언어에 맞는 이름을 골라낸다. lang='ja'면 name_jp, 아니면 name_kr. */
+function nameOf(card, lang) {
+  return lang === "ja" ? card.name_jp || card.name_kr : card.name_kr;
+}
+
 /**
  * 리더 의상스킬 조건이 5장 편성 내에서 성립하는지 판정.
  * 조건 문자열 패턴: "무조건", "{타입} 2인 이상", "{기생} 2인 이상" 등.
  * 매우 단순한 파서 — condition 필드가 자연어라 완벽 매칭은 아님. 필요시 수동 확인.
  */
-function checkCondition(conditionText, fiveMembers) {
+function checkCondition(conditionText, fiveMembers, lang = "ko") {
+  const t18 = UI[lang] || UI.ko;
   if (!conditionText || /무조건/.test(conditionText)) {
-    return { met: true, reason: "무조건 발동" };
+    return { met: true, reason: t18.unconditional };
   }
   const types = ["해피", "퓨어", "큐트"];
   for (const t of types) {
@@ -47,7 +54,7 @@ function checkCondition(conditionText, fiveMembers) {
       const need = conditionText.includes("2인") ? 2 : conditionText.includes("3인") ? 3 : 1;
       return {
         met: count >= need,
-        reason: `${t} 타입 ${count}/${need}인 (멤버 5명 중, 리더 미포함)`,
+        reason: t18.typeReason(t, count, need),
       };
     }
   }
@@ -59,10 +66,10 @@ function checkCondition(conditionText, fiveMembers) {
     const need = conditionText.includes("2인") ? 2 : conditionText.includes("3인") ? 3 : 1;
     return {
       met: count >= need,
-      reason: `${tag} 소속 ${count}/${need}인 (멤버 5명 중, 리더 미포함)`,
+      reason: t18.tagReason(tag, count, need),
     };
   }
-  return { met: null, reason: `자동판정 불가 (조건 원문: "${conditionText}") — 수동 확인 필요` };
+  return { met: null, reason: t18.cannotAutoJudge(conditionText) };
 }
 
 /**
@@ -70,12 +77,14 @@ function checkCondition(conditionText, fiveMembers) {
  * leaderId는 fiveMemberIds에 포함되면 안 됨 (별도 슬롯, 6인 구조).
  * 리더 자신의 스탯은 3축 합계에 포함되지 않음 — 오직 코스튬 배율 판정에만 쓰임.
  */
-function calcUnitStats(members, leaderId, fiveMemberIds) {
+function calcUnitStats(members, leaderId, fiveMemberIds, options = {}) {
+  const lang = options.lang === "ja" ? "ja" : "ko";
+  const t18 = UI[lang] || UI.ko;
   if (fiveMemberIds.includes(leaderId)) {
-    throw new Error("리더는 멤버 5명과 별개 슬롯이어야 함 (6인 구조, 리더 카드를 멤버로 중복 사용 불가)");
+    throw new Error(t18.errLeaderInMembers);
   }
   if (fiveMemberIds.length !== 5) {
-    throw new Error(`멤버는 정확히 5명이어야 함 (현재 ${fiveMemberIds.length}명)`);
+    throw new Error(t18.errNotFiveMembers(fiveMemberIds.length));
   }
   const leader = findCard(members, leaderId);
   const fiveMembers = fiveMemberIds.map((id) => findCard(members, id));
@@ -84,7 +93,7 @@ function calcUnitStats(members, leaderId, fiveMemberIds) {
   const missingStats = [];
   for (const c of fiveMembers) {
     if (c.stats.performance == null) {
-      missingStats.push(c.name_kr);
+      missingStats.push(nameOf(c, lang));
       continue;
     }
     base.performance += c.stats.performance;
@@ -92,56 +101,71 @@ function calcUnitStats(members, leaderId, fiveMemberIds) {
     base.sense += c.stats.sense;
   }
 
-  const costumeCheck = checkCondition(leader.costume?.condition, fiveMembers);
+  const costumeCheck = checkCondition(leader.costume?.condition, fiveMembers, lang);
   const bonus = { performance: 0, technique: 0, sense: 0 };
-  const costumeEffect = leader.costume?.effect || "";
+  const costumeEffectKo = leader.costume?.effect || "";
   if (costumeCheck.met) {
-    const pctMatch = costumeEffect.match(/(\d+)%/);
+    const pctMatch = costumeEffectKo.match(/(\d+)%/);
     const pct = pctMatch ? parseInt(pctMatch[1], 10) / 100 : 0;
-    if (/퍼포먼스/.test(costumeEffect) || /전파라미터/.test(costumeEffect)) bonus.performance += base.performance * pct;
-    if (/테크닉/.test(costumeEffect) || /전파라미터/.test(costumeEffect)) bonus.technique += base.technique * pct;
-    if (/센스/.test(costumeEffect) || /전파라미터/.test(costumeEffect)) bonus.sense += base.sense * pct;
+    if (/퍼포먼스/.test(costumeEffectKo) || /전파라미터/.test(costumeEffectKo)) bonus.performance += base.performance * pct;
+    if (/테크닉/.test(costumeEffectKo) || /전파라미터/.test(costumeEffectKo)) bonus.technique += base.technique * pct;
+    if (/센스/.test(costumeEffectKo) || /전파라미터/.test(costumeEffectKo)) bonus.sense += base.sense * pct;
   }
 
   const totalBase = base.performance + base.technique + base.sense;
   const totalBonus = bonus.performance + bonus.technique + bonus.sense;
 
   return {
-    leader: leader.name_kr,
-    members: fiveMembers.map((c) => c.name_kr),
+    leader: nameOf(leader, lang),
+    members: fiveMembers.map((c) => nameOf(c, lang)),
     base,
     costumeCheck,
-    costumeEffect,
+    costumeEffect: lang === "ja" ? toJa(costumeEffectKo) : costumeEffectKo,
     bonus,
     total3axis: totalBase + totalBonus,
     totalBase,
     totalBonus,
     missingStats,
-    qualitativeNote: "스코어서포트/스페셜/패시브·액티브 발동효과/보드/커넥트는 위 숫자에 미포함. listSkills()로 별도 확인. 리더 자신의 스탯도 미포함(별도 슬롯).",
+    qualitativeNote: t18.qualitativeNote,
   };
 }
 
-/** 리더 + 멤버5명의 스페셜/액티브/패시브를 수치화하지 않고 나열만 (참고용). */
-function listSkills(members, leaderId, fiveMemberIds) {
+/** 리더 + 멤버5명의 스페셜/액티브/패시브를 수치화하지 않고 나열만 (참고용). lang='ja'면 이름/스킬텍스트를 일본어로 반환. */
+function listSkills(members, leaderId, fiveMemberIds, lang = "ko") {
+  const t18 = UI[lang] || UI.ko;
+  const tr = (koText) => (lang === "ja" ? toJa(koText) : koText);
   const leader = findCard(members, leaderId);
   const fiveMembers = fiveMemberIds.map((id) => findCard(members, id));
   const all = [{ card: leader, isLeader: true }, ...fiveMembers.map((c) => ({ card: c, isLeader: false }))];
   return all.map(({ card: c, isLeader }) => ({
-    name: c.name_kr,
+    name: nameOf(c, lang),
     isLeader,
-    special: `SS${c.special?.score_support_pct ?? "?"}% (${c.special?.duration_sec ?? "?"}s) — ${c.special?.activation_condition ?? "미확인"}`,
-    active: `${c.active?.probability ?? "?"} ${c.active?.base_pct ?? "?"}%${c.active?.conditional_pct ? "→" + c.active.conditional_pct + "%" : ""} (${c.active?.duration_sec ?? "?"}s/${c.active?.interval_sec ?? "?"}s간격) — ${c.active?.condition ?? "조건없음"}`,
-    passive: `${c.passive?.condition ?? "?"} → ${c.passive?.effect ?? "?"}`,
-    costumeIfLeader: isLeader ? `${c.costume?.condition ?? "?"} → ${c.costume?.effect ?? "?"} (멤버 미포함 스탯, 리더 전용)` : "(리더 아님, 의상 미적용, 스탯은 3축합계에 포함됨)",
-    connect: `${c.connect?.range_tiles ?? "?"}칸 / ${c.connect?.multiplier_pct ?? "?"}%`,
+    special: t18.specialLine(
+      c.special?.score_support_pct ?? t18.unknownMark,
+      c.special?.duration_sec ?? t18.unknownMark,
+      tr(c.special?.activation_condition) ?? t18.unknownMark
+    ),
+    active: t18.activeLine(
+      tr(c.active?.probability) ?? t18.unknownMark,
+      c.active?.base_pct ?? t18.unknownMark,
+      c.active?.conditional_pct ? "→" + c.active.conditional_pct + "%" : "",
+      c.active?.duration_sec ?? t18.unknownMark,
+      c.active?.interval_sec ?? t18.unknownMark,
+      tr(c.active?.condition) ?? t18.noCondition
+    ),
+    passive: t18.passiveLine(tr(c.passive?.condition) ?? t18.unknownMark, tr(c.passive?.effect) ?? t18.unknownMark),
+    costumeIfLeader: isLeader
+      ? t18.costumeLeaderLine(tr(c.costume?.condition) ?? t18.unknownMark, tr(c.costume?.effect) ?? t18.unknownMark)
+      : t18.notLeaderLine,
+    connect: t18.connectLine(c.connect?.range_tiles ?? t18.unknownMark, c.connect?.multiplier_pct ?? t18.unknownMark),
   }));
 }
 
-/** 여러 리더+편성을 나란히 비교 (3축 합계 기준, 상대비교 전용). */
+/** 여러 리더+편성을 나란히 비교 (3축 합계 기준, 상대비교 전용). formations의 각 항목에 lang 지정 가능(미지정 시 'ko'). */
 function compareFormations(members, formations) {
   return formations.map((f) => ({
     label: f.label,
-    ...calcUnitStats(members, f.leaderId, f.fiveMemberIds),
+    ...calcUnitStats(members, f.leaderId, f.fiveMemberIds, { lang: f.lang }),
   }));
 }
 
