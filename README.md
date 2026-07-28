@@ -1,5 +1,7 @@
 # holodori-calculator
 
+[🇯🇵 日本語版はこちら / Japanese version](./README.ja.md)
+
 hololive Dreams(홀로도리) 개인용 비공식 편성 계산기. 사쿠라 미코 오시 계정 최적화용.
 
 ## ⚠️ 먼저 읽기: 이 계산기가 할 수 없는 것
