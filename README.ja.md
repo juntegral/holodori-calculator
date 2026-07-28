@@ -25,26 +25,17 @@ horodori.comが唯一「編成シミュレーター」(計算ツール)を作っ
 
 | 含まれる(数値で計算) | 含まれない(条件のみ表示、数値未反映) |
 |---|---|
-| カード5枚のPerformance/Technique/Senseの合計 | スコアサポート(換算式自体が未確定) |
+| メンバー5人のPerformance/Technique/Senseの合計(リーダー自身のステータスは除く) | スコアサポート(換算式自体が未確定) |
 | リーダー衣装スキルのパラメータUP%(条件成立時) | スペシャルスキル(発動順序/タイミング未確定) |
 | | アクティブ/パッシブスキルの効果量(条件成立の有無のみ表示) |
 | | ホロメンボード、コネクト、メモリー、メンバー強化ボーナス |
 
 この区分はhorodori.comの計算モデルをそのまま踏襲したものです(出典は上記と同じ)。
 
-## ⚠️ 構造の食い違い: 「5人編成」 vs 「6人編成」 — 本レポは5人モデルを採用
+## 構造: リーダー1人 + メンバー5人 = 合計6人 (2026-07-29 ユーザー確認により最終確定)
 
-- **horodori.comのモデル**: 「ユニットはリーダー1人＋メンバー5人の6人編成」— リーダーが
-  カード5枚とは別枠の6人構造。(出典: horodori.com/members/deck-builder, 「メンバーの基本」セクション)
-- **ユーザー実機スクリーンショットによる検証結果**(本プロジェクト以前のセッションで直接確認):
-  編成画面は**合計5枠**で、リーダーはその5枠のうち1つにスポットライトが当たる構造。
-  カード5枚 = リーダー1 + メンバー4。
-- 公式の事前登録/リリース前資料の一部も「1+5=6人」と表記していた経緯があり、混同の
-  原因と推測されます。**本計算機は実機スクリーンショット(直接観察という最も信頼性の高い
-  根拠)に従い5人構造を採用**します。つまりリーダーのステータスも5枚の合計に含まれ、
-  リーダーの衣装スキル発動条件の判定でもリーダー自身が条件カウントに入ります(例: ノエル
-  (リーダー、ハッピー) + みこ(ハッピー) = 「ハッピー2人以上」の条件成立、リーダー込みで
-  カウント)。
+- **確定した構造**: リーダーはメンバー5人とは別枠であり、リーダー自身のステータスは3軸合計に含まれません(衣装スキルの発動判定にのみ使用)。リーダーの衣装スキル発動条件(例:「holoX2人以上」)は**メンバー5人の間だけ**でカウントされ、リーダー自身はそのカウントには入りません(例: ラプラス(リーダー、holoX)をリーダーにした場合、「holoX2人以上」の条件を満たすにはリーダーを除くメンバー5人のうち2人がholoXである必要があり、ラプラス自身はカウントされない)。(出典: horodori.com/members/deck-builder, 「メンバーの基本」セクション)
+- **以前の設定の訂正**: 本レポは2026-07-29初頭に「実機スクリーンショットで5人構造を検証した」と誤って記載していましたが、ユーザー本人の指摘により訂正されました。
 - **不一致が見つかった場合**: 実際のゲーム内表示値とこの計算機の結果が異なる場合、ゲーム内
   表示が常に優先されます。この計算機はあくまで参考用ツールです。
 
@@ -67,20 +58,20 @@ holodori-calculator/
 const { loadMembers, calcUnitStats, listSkills, compareFormations } = require("./src/calculator.js");
 const members = loadMembers();
 
-// 例: ラプラスリーダー編成の試算
+// 例: ラプラスをリーダーに、他の5人をメンバーに試算 (リーダーはメンバー配列に含めない)
 const result = calcUnitStats(
   members,
-  ["laplus_sakusen", "koyori_labo", "iroha_chikurin", "azki_sakihokoru", "kobo_amefuri"],
-  "laplus_sakusen"
+  "laplus_sakusen",
+  ["koyori_labo", "iroha_chikurin", "azki_sakihokoru", "kobo_amefuri", "kiara_phoenix"]
 );
 console.log(result);
 
 // スキル一覧(定性的情報、数値は未反映)
-console.log(listSkills(members, [...], "laplus_sakusen"));
+console.log(listSkills(members, "laplus_sakusen", [...]));
 
 // 複数編成の比較
 console.log(compareFormations(members, [
-  { label: "ノエルリーダー", fiveCardIds: ["noel_kazekaoru","miko_sakura_bloom","azki_sakihokoru","koyori_labo","haato_oyatsu"], leaderId: "noel_kazekaoru" },
+  { label: "ラプラスリーダー", leaderId: "laplus_sakusen", fiveMemberIds: ["koyori_labo","iroha_chikurin","azki_sakihokoru","kobo_amefuri","kiara_phoenix"] },
 ]));
 ```
 
