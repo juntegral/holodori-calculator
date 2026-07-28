@@ -66,8 +66,20 @@ const result = calcUnitStats(
 );
 console.log(result);
 
-// スキル一覧(定性的情報、数値は未反映)
-console.log(listSkills(members, "laplus_sakusen", [...]));
+// 日本語出力もサポート: 4番目の引数に { lang: "ja" } を渡すと、カード名・条件文・
+// ステータスメッセージが全て日本語で返ります(data/members.json実収録の91種のスキル/条件文を
+// src/i18n.jsで全数翻訳済み)。デフォルトは韓国語("ko")です。
+const resultJa = calcUnitStats(
+  members,
+  "laplus_sakusen",
+  ["koyori_labo", "iroha_chikurin", "azki_sakihokoru", "kobo_amefuri", "kiara_phoenix"],
+  { lang: "ja" }
+);
+console.log(resultJa.leader); // "ラプラス・ダークネス"
+console.log(resultJa.costumeEffect); // "全員の全パラメータが50%UP"
+
+// スキル一覧(定性的情報、数値は未反映) — listSkillsも4番目の引数でlang指定可能
+console.log(listSkills(members, "laplus_sakusen", [...], "ja"));
 
 // 複数編成の比較
 console.log(compareFormations(members, [
