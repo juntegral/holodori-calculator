@@ -80,6 +80,19 @@ const result = calcUnitStats(
 );
 console.log(result);
 
+// 일본어 출력: 4번째 인자로 { lang: "ja" } 전달 — 카드명/조건문/스타타스메시지가 전부 일본어로 나옵니다.
+// (data/members.json에 실제 등장하는 스킬/조건 문구 91종 전수를 src/i18n.js에 번역해둘)
+const resultJa = calcUnitStats(
+  members,
+  "laplus_sakusen",
+  ["koyori_labo", "iroha_chikurin", "azki_sakihokoru", "kobo_amefuri", "kiara_phoenix"],
+  { lang: "ja" }
+);
+console.log(resultJa.leader); // "ラプラス・ダークネス"
+console.log(resultJa.costumeEffect); // "全員の全パラメータが50%UP"
+
+// listSkills도 4번째 인자로 lang 전달 가능: listSkills(members, "laplus_sakusen", [...], "ja")
+
 // 스킬 목록(정성적, 수치 미반영)
 console.log(listSkills(members, "laplus_sakusen", [...]));
 
