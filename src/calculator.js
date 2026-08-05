@@ -170,4 +170,102 @@ function compareFormations(members, formations) {
   }));
 }
 
-module.exports = { loadMembers, findCard, checkCondition, calcUnitStats, listSkills, compareFormations };
+/**
+ * ===================================================================
+ * 스코어 계산식 유틸리티 (2026-08-05 주간 점검에서 신규 추가)
+ * ===================================================================
+ * 출처: 비공식 팬사이트 dreams.wf-calc.net("ホロドリ研究室"/Holodori Lab)의
+ *   "ライブ・スコア"(Live and Score) 페이지 — https://dreams.wf-calc.net/wiki/live?lang=ja
+ *   (2026-08-05 확인). horodori.com보다 훨씬 구체적인 판정배율/콤보보너스/액티브발동률/
+ *   스코어레이트 산출식을 공개하고 있으나, 이 사이트 역시 스스로를 "비공식 데이터베이스＆
+ *   도구 사이트"로만 소개할 뿐 데이터마인인지 실측 테스트인지는 명시하지 않음 — 여전히
+ *   팬 추정치로 취급할 것. 원문 인용은 README.md 참고. 공식(COVER/QualiArts) 발표는
+ *   여전히 없음.
+ *
+ * ⚠️ 이 함수들은 위 calcUnitStats()/listSkills()와 완전히 독립된 별도 유틸리티다.
+ *   기존 함수의 동작/API는 전혀 변경되지 않았다. data/members.json의 카드별 수치를
+ *   이 함수들에 자동으로 연결하는 부분은 아직 구현하지 않았음(스코어UP과 파라미터UP의
+ *   스키마 구분이 아직 불명확해 추가 검증 필요) — 값을 직접 넣어 쓰는 수동 계산용.
+ */
+
+/** 판정별 기본 스코어 배율. HOLD는 마디당 중간판정 7회 + 시작/종료 각 1회의 복합 구조라
+ *  단일 배율로 전체를 표현할 수 없음 — 여기서는 "중간판정 1회분" 배율만 제공(HOLD_TICK). */
+const JUDGMENT_SCORE_RATIO = {
+  PERFECT: 1.0,
+  GREAT: 0.8,
+  AUTO: 0.8, // GREAT와 동일 배율. 콤보보너스는 미적용되지만 스코어UP/서포트는 그대로 적용됨
+  GOOD: 0.5,
+  BAD: 0,
+  MISS: 0,
+  HOLD_TICK: 0.1,
+};
+
+/** 액티브 스킬 발동확률 등급(카드 데이터 active.probability 필드값)의 기본 발동률(%). */
+const ACTIVE_SKILL_BASE_RATE_PCT = {
+  고확률: 55,
+  중확률: 45,
+  저확률: 35,
+};
+
+/**
+ * 액티브 스킬 발동률 계산. 발동률UP류 효과는 "먼저 합산 후 곱연산"으로 적용됨.
+ * 예: 기본 45% + 스페셜 스킬 +45% → 45% × (1+0.45) = 65.25%
+ * @param {string|number} baseProbabilityOrPct - "고확률"/"중확률"/"저확률" 라벨 또는 %숫자 직접 지정
+ * @param {number} [boostPctSum=0] - 발동률UP 효과 %의 합계(예: 45면 +45%)
+ */
+function calcActiveSkillRate(baseProbabilityOrPct, boostPctSum = 0) {
+  const basePct =
+    typeof baseProbabilityOrPct === "number" ? baseProbabilityOrPct : ACTIVE_SKILL_BASE_RATE_PCT[baseProbabilityOrPct];
+  if (basePct == null) throw new Error(`알 수 없는 발동확률 라벨: ${baseProbabilityOrPct}`);
+  return basePct * (1 + boostPctSum / 100);
+}
+
+/** 콤보 보너스(%). 100콤보부터 +1%, 200콤보부터 +2%, 이후 100콤보당 +1%씩 증가, 최대 +10%. */
+function calcComboBonusPct(comboCount) {
+  if (comboCount < 100) return 0;
+  return Math.min(10, Math.floor(comboCount / 100));
+}
+
+/** 곡별 스코어레이트 = ⌈하이스코어 ÷ 5000⌉ (소수 올림). */
+function calcSongScoreRate(highScore) {
+  return Math.ceil(highScore / 5000);
+}
+
+/** 홀로멘 스코어레이트 = 해당 홀로멘을 리더로 플레이한 곡들 중 상위 3곡의 스코어레이트 합.
+ *  songScoreRates에 전체 곡의 스코어레이트 배열을 넣으면 자동으로 상위 3개를 골라 합산한다. */
+function calcHolomemScoreRate(songScoreRates) {
+  return [...songScoreRates].sort((a, b) => b - a).slice(0, 3).reduce((s, v) => s + v, 0);
+}
+
+/**
+ * 노트 1개의 스코어 시산: 판정 배율 × 스코어업 배율 × (100%+스코어서포트 합계).
+ * 소수는 최종 단계에서만 올림 처리(원문: "乗算中の小数は保持し、最終的にスコアを算出する
+ * ときに小数を切り上げる").
+ * @param {object} p
+ * @param {number} p.baseScore - 판정 전 원점수(곡/난이도별 게임 내부 고정값, 이 저장소엔 없음)
+ * @param {"PERFECT"|"GREAT"|"AUTO"|"GOOD"|"BAD"|"MISS"|"HOLD_TICK"} p.judgment
+ * @param {number} [p.scoreUpMultiplier=1] - 스코어UP 합계를 배율로 환산한 값(100%=1.0)
+ * @param {number} [p.scoreSupportPctSum=0] - 스코어서포트 효과% 합계
+ */
+function calcNoteScore({ baseScore, judgment, scoreUpMultiplier = 1, scoreSupportPctSum = 0 }) {
+  const ratio = JUDGMENT_SCORE_RATIO[judgment];
+  if (ratio == null) throw new Error(`알 수 없는 판정: ${judgment}`);
+  const raw = baseScore * ratio * scoreUpMultiplier * (1 + scoreSupportPctSum / 100);
+  return Math.ceil(raw);
+}
+
+module.exports = {
+  loadMembers,
+  findCard,
+  checkCondition,
+  calcUnitStats,
+  listSkills,
+  compareFormations,
+  JUDGMENT_SCORE_RATIO,
+  ACTIVE_SKILL_BASE_RATE_PCT,
+  calcActiveSkillRate,
+  calcComboBonusPct,
+  calcSongScoreRate,
+  calcHolomemScoreRate,
+  calcNoteScore,
+};
